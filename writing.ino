@@ -1943,3 +1943,6 @@ void broadcastGameState() {
 
 //for god sake
 //help me
+
+void do_nothing(){
+}

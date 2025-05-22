@@ -1,0 +1,11 @@
+[package]
+name = "esp32-watch"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+esp-idf-hal = "0.40.0"
+esp-idf-sys = "0.30.0"
+embedded-graphics = "0.8.0"
+sh1106 = "0.8.0"
+anyhow = "1.0" 

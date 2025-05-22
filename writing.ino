@@ -3,6 +3,11 @@
 #include <Adafruit_SH110X.h>
 #include <math.h>
 #include <vector>
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
+#include <ArduinoJson.h>
+#include <SPIFFS.h>
 
 // OLED display settings
 #define SCREEN_WIDTH 128
@@ -17,6 +22,9 @@
 const int JOY_VRX_PIN = 15; // VRX connected to GPIO 15
 const int JOY_VRY_PIN = 2;  // VRY connected to GPIO 2
 const int JOY_SW_PIN = 4;   // SW connected to GPIO 4
+
+// LED Pin for Online Game
+const int LED_PIN = 13;
 
 // Joystick thresholds and deadzone
 const int JOYSTICK_CENTER = 2048; // Approximate center value
@@ -34,12 +42,13 @@ enum GameState {
   GOOGLE_DINO,
   CROSSY_ROAD,
   AIRPLANE,
-  TETRIS
+  TETRIS,
+  ONLINE_GAME
 };
 GameState currentGameState = MENU;
 
 // Menu variables
-const char* gameNames[] = {"Google Dino", "Crossy Road", "Airplane", "Tetris"};
+const char* gameNames[] = {"Google Dino", "Crossy Road", "Airplane", "Tetris", "Online Game"};
 int selectedGame = 0;
 int numGames = sizeof(gameNames) / sizeof(gameNames[0]);
 
@@ -336,17 +345,56 @@ void resetDinoGame();
 void runCrossyRoad();
 void runAirplane();
 void runTetris();
+void runOnlineGame();
 void checkJoystickEvents();
 void drawGroundLine();
 void drawClouds();    // New prototype
 void updateClouds();  // New prototype
+void initializeOnlineGame();
+void cleanupOnlineGame(); // <<< ADDED THIS
 
+// Create AsyncWebServer object on port 80
+AsyncWebServer server(80);
+AsyncWebSocket ws("/ws"); // WebSocket server on path "/ws"
+
+// Access Point credentials
+const char* ssid = "S2speed";
+const char* password = "Jalal123"; // Min 8 characters
+
+// Online Game variables
+struct Player {
+  String id;
+  String name;
+  float x;
+  float y;
+  bool active;
+  unsigned long spottedTime;
+  bool isSpotted;
+};
+
+std::vector<Player> players;
+bool gameStarted = false;
+unsigned long gameStartTime = 0;
+const unsigned long gameDuration = 180000; // 3 minutes in milliseconds
+float adminX = 64.0; // Admin spotlight center X (default to center)
+float adminY = 32.0; // Admin spotlight center Y (default to center)
+const float spotlightRadius = 15.0; // Radius of admin's spotlight
+bool adminWon = false;
+
+// Forward declarations for WebSocket functions
+void handleWebSocketMessage(AsyncWebSocketClient *client, void *arg, uint8_t *data, size_t len);
+void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
+void notifyClients();
+void broadcastGameState();
 
 void setup() {
   Serial.begin(115200);
   Wire.begin(I2C_SDA, I2C_SCL);
 
   pinMode(JOY_SW_PIN, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT); // Set LED_PIN as OUTPUT
+  digitalWrite(LED_PIN, LOW); // Initially turn LED off
+
   // ADC for joystick X and Y are typically already configured.
 
   if(!display.begin(0x3C, true)) { // Address 0x3C for 128x64
@@ -359,7 +407,57 @@ void setup() {
   display.setTextColor(SH110X_WHITE);
   display.setTextSize(1);
 
+  // Initialize SPIFFS for serving web files
+  if(!SPIFFS.begin(true)){
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
   resetDinoGame(); // Initialize Dino game variables
+  CrossyRoadGame::resetCrossyRoadGame(); // Initialize Crossy Road game variables
+
+  // --- Online Game Web Server Setup ---
+  // WebSocket event handler
+  ws.onEvent(onWebSocketEvent);
+  server.addHandler(&ws);
+
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/index.html", "text/html");
+  });
+  
+  // Route for game page
+  server.on("/game", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/game.html", "text/html");
+  });
+
+  // Route for JavaScript and CSS files
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/style.css", "text/css");
+  });
+  
+  server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/script.js", "application/javascript");
+  });
+
+  // Route for login
+  server.on("/login", HTTP_POST, [](AsyncWebServerRequest *request){
+    if(request->hasParam("playerName", true)) {
+      String playerName = request->getParam("playerName", true)->value();
+      Serial.print("Player joined: ");
+      Serial.println(playerName);
+      
+      // For now, just redirect to the game page
+      // The actual player registration will happen via WebSocket
+      request->redirect("/game");
+    } else {
+      request->redirect("/");
+    }
+  });
+  
+  Serial.println("HTTP server routes configured.");
+  // server.begin(); // Will be started in initializeOnlineGame when AP is up
+  // --- End Online Game Web Server Setup ---
 }
 
 void loop() {
@@ -396,6 +494,9 @@ void loop() {
       // Placeholder for Tetris
       runTetris();
       break;
+    case ONLINE_GAME:
+      runOnlineGame();
+      break;
   }
   display.display();
   delay(30); // Frame rate delay
@@ -422,6 +523,9 @@ void checkJoystickEvents() { // New function name
     if (clickCount >= 2 && (currentTime - lastJoySWReleaseTime < doubleClickDelay)) {
       // Serial.println("Double Click Action!"); // Debug
       if (currentGameState != MENU) {
+        if (currentGameState == ONLINE_GAME) {
+          cleanupOnlineGame();
+        }
         currentGameState = MENU;
         selectedGame = 0;
         if (DinoGame::gameOver) resetDinoGame();
@@ -496,6 +600,8 @@ void handleMenuInput() {
         CrossyRoadGame::resetCrossyRoadGame();
     } else if (newGameState == TETRIS) {
         Tetris::initialize_game(); // Tetris namespace is now defined before this function
+    } else if (newGameState == ONLINE_GAME) {
+        initializeOnlineGame();
     }
 
     currentGameState = newGameState; 
@@ -1113,6 +1219,259 @@ void runAirplane() {
   // display.display() is called in loop()
 }
 
+// --- Placeholder for Online Game ---
+void initializeOnlineGame() {
+  Serial.println("Initializing Online Game...");
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(5, 5);
+  display.println("Starting AP...");
+  display.display();
+
+  // Disconnect from any existing WiFi connection
+  WiFi.disconnect(true);
+  delay(1000);
+
+  // Configure AP mode
+  WiFi.mode(WIFI_AP);
+  delay(100);
+
+  // Start AP with proper configuration
+  bool ap_started = WiFi.softAP(ssid, password, 1, 0, 4); // Channel 1, hidden=false, max_connection=4
+  if (!ap_started) {
+    Serial.println("Failed to start AP!");
+    display.setCursor(5, 15);
+    display.println("AP Start Failed!");
+    display.display();
+    delay(2000);
+    cleanupOnlineGame(); // <<< ADDED THIS
+    currentGameState = MENU;
+    return;
+  }
+
+  IPAddress AP_IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(AP_IP);
+  
+  display.setCursor(5, 15);
+  display.print("AP IP: ");
+  display.println(AP_IP);
+  display.setCursor(5, 25);
+  display.print("Connect to ");
+  display.println(ssid);
+  display.display();
+
+  // Reset game state
+  players.clear();
+  gameStarted = false;
+  adminX = 64.0;
+  adminY = 32.0;
+  adminWon = false;
+
+  // Start server with proper error handling
+  try {
+    server.begin();
+    Serial.println("HTTP server started");
+    display.setCursor(5, 35);
+    display.println("Server Ready!");
+    display.display();
+    digitalWrite(LED_PIN, HIGH);
+  } catch (const std::exception& e) {
+    Serial.print("Server start failed: ");
+    Serial.println(e.what());
+    display.setCursor(5, 35);
+    display.println("Server Start Failed!");
+    display.display();
+    delay(2000);
+    cleanupOnlineGame(); // <<< ADDED THIS
+    currentGameState = MENU;
+    return;
+  }
+}
+
+void runOnlineGame() {
+  static unsigned long lastUpdateTime = 0;
+  static unsigned long lastSpotCheckTime = 0;
+  static unsigned long lastBroadcastTime = 0;
+  unsigned long currentTime = millis();
+  
+  // Handle joystick input to move admin spotlight
+  int joyXVal = analogRead(JOY_VRX_PIN);
+  int joyYVal = analogRead(JOY_VRY_PIN);
+  
+  // Update admin position based on joystick with a dead zone
+  if (currentTime - lastUpdateTime > 50) { // Update at 20Hz
+    float adminSpeed = 2.0;
+    
+    if (joyXVal < JOYSTICK_DEADZONE_LOW) {
+      adminX -= adminSpeed;
+    } else if (joyXVal > JOYSTICK_DEADZONE_HIGH) {
+      adminX += adminSpeed;
+    }
+    
+    if (joyYVal < JOYSTICK_DEADZONE_LOW) {
+      adminY -= adminSpeed;
+    } else if (joyYVal > JOYSTICK_DEADZONE_HIGH) {
+      adminY += adminSpeed;
+    }
+    
+    // Constrain admin spotlight within the screen
+    if (adminX < spotlightRadius) adminX = spotlightRadius;
+    if (adminX > SCREEN_WIDTH - spotlightRadius) adminX = SCREEN_WIDTH - spotlightRadius;
+    if (adminY < spotlightRadius) adminY = spotlightRadius;
+    if (adminY > SCREEN_HEIGHT - spotlightRadius) adminY = SCREEN_HEIGHT - spotlightRadius;
+    
+    lastUpdateTime = currentTime;
+  }
+  
+  // Check for spotted players every 100ms
+  if (currentTime - lastSpotCheckTime > 100) {
+    bool anyPlayerSpotted = false;
+    
+    // Process each player
+    for (auto& player : players) {
+      if (!player.active) continue; // Skip eliminated players
+      
+      // Calculate distance between admin spotlight and player
+      float dx = player.x - adminX;
+      float dy = player.y - adminY;
+      float distance = sqrt(dx*dx + dy*dy);
+      
+      // Check if player is within spotlight radius
+      if (distance < spotlightRadius) {
+        anyPlayerSpotted = true;
+        
+        // If player wasn't previously spotted, start timing
+        if (!player.isSpotted) {
+          player.isSpotted = true;
+          player.spottedTime = currentTime;
+        } 
+        // If player has been spotted for 3 seconds, eliminate them
+        else if (currentTime - player.spottedTime > 3000) {
+          player.active = false;
+          player.isSpotted = false;
+          
+          // Check if all players are eliminated (admin wins)
+          bool allEliminated = true;
+          for (const auto& p : players) {
+            if (p.active) {
+              allEliminated = false;
+              break;
+            }
+          }
+          
+          if (allEliminated) {
+            adminWon = true;
+            gameStarted = false;
+          }
+        }
+      } else {
+        // Player moved out of spotlight
+        player.isSpotted = false;
+      }
+    }
+    
+    // Turn on LED if any player is spotted
+    digitalWrite(LED_PIN, anyPlayerSpotted ? HIGH : LOW);
+    
+    lastSpotCheckTime = currentTime;
+  }
+  
+  // Broadcast game state to all clients every 100ms
+  if (currentTime - lastBroadcastTime > 100) {
+    broadcastGameState();
+    lastBroadcastTime = currentTime;
+  }
+  
+  // Handle game timeout
+  if (gameStarted && (currentTime - gameStartTime) > gameDuration) {
+    gameStarted = false;
+    // Players win if any are still active
+    bool playersWon = false;
+    for (const auto& player : players) {
+      if (player.active) {
+        playersWon = true;
+        break;
+      }
+    }
+    adminWon = !playersWon;
+  }
+  
+  // Update OLED display with game status
+  display.clearDisplay();
+  display.setTextSize(1);
+  
+  if (!gameStarted) {
+    display.setCursor(5, 0);
+    display.print("Players: ");
+    display.println(players.size());
+    
+    display.setCursor(5, 10);
+    if (players.size() >= 2) {
+      display.println("Ready to start");
+    } else {
+      display.println("Need 2+ players");
+    }
+    
+    display.setCursor(5, 20);
+    display.print("Press button");
+    display.setCursor(5, 30);
+    display.print("to start game");
+  } else {
+    // Draw game timer
+    unsigned long elapsedTime = currentTime - gameStartTime;
+    if (elapsedTime > gameDuration) elapsedTime = gameDuration;
+    unsigned long remainingTime = (gameDuration - elapsedTime) / 1000;
+    
+    display.setCursor(5, 0);
+    display.print("Time: ");
+    display.print(remainingTime);
+    display.print("s");
+    
+    display.setCursor(5, 10);
+    display.print("Active: ");
+    int activePlayers = 0;
+    for (const auto& player : players) {
+      if (player.active) activePlayers++;
+    }
+    display.println(activePlayers);
+    
+    // Draw admin's spotlight position
+    display.drawCircle(adminX, adminY, spotlightRadius, SH110X_WHITE);
+  }
+  
+  display.display();
+  
+  // Check for joystick button press to start game
+  if (!gameStarted && players.size() >= 2) {
+    int joySWState = digitalRead(JOY_SW_PIN);
+    static int lastJoySWState = HIGH;
+    static unsigned long lastJoyPressTime = 0;
+    
+    if (joySWState == LOW && lastJoySWState == HIGH && (currentTime - lastJoyPressTime > 500)) {
+      // Button pressed, start game
+      gameStarted = true;
+      gameStartTime = currentTime;
+      Serial.println("Game started by admin!");
+      lastJoyPressTime = currentTime;
+      broadcastGameState();
+    }
+    
+    lastJoySWState = joySWState;
+  }
+}
+
+void cleanupOnlineGame() {
+  Serial.println("Cleaning up Online Game...");
+  ws.closeAll(); // Close all WebSocket connections
+  ws.cleanupClients(); // Cleanup WebSocket clients
+  server.end(); // Stop the web server
+  WiFi.softAPdisconnect(true); // Disconnect clients and stop the AP
+  WiFi.mode(WIFI_OFF); // Turn off WiFi
+  digitalWrite(LED_PIN, LOW); // Turn off LED
+  Serial.println("Online Game cleanup complete.");
+}
+
 // --- Tetris Game Implementation ---
 namespace Tetris {
     // Forward declarations within the namespace
@@ -1430,4 +1789,154 @@ void runTetris() {
     }
 
     Tetris::render_display(); 
+}
+
+// WebSocket event handler
+void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  switch (type) {
+    case WS_EVT_CONNECT:
+      Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+      break;
+    case WS_EVT_DISCONNECT:
+      Serial.printf("WebSocket client #%u disconnected\n", client->id());
+      // Remove player when they disconnect
+      for (size_t i = 0; i < players.size(); i++) {
+        if (players[i].id == String(client->id())) {
+          players.erase(players.begin() + i);
+          break;
+        }
+      }
+      broadcastGameState(); // Update all clients about the disconnection
+      break;
+    case WS_EVT_DATA:
+      handleWebSocketMessage(client, arg, data, len);
+      break;
+    case WS_EVT_PONG:
+    case WS_EVT_ERROR:
+      break;
+  }
+}
+
+void handleWebSocketMessage(AsyncWebSocketClient *client, void *arg, uint8_t *data, size_t len) {
+  AwsFrameInfo *info = (AwsFrameInfo*)arg;
+  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+    // Null-terminate the data for string handling
+    data[len] = 0;
+    String message = String((char*)data);
+    
+    // Parse JSON message
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, message);
+    
+    if (error) {
+      Serial.print("deserializeJson() failed: ");
+      Serial.println(error.c_str());
+      return;
+    }
+    
+    // Process message based on type
+    String messageType = doc["type"];
+    
+    if (messageType == "register") {
+      // Register new player
+      Player newPlayer;
+      newPlayer.id = String(client->id());
+      newPlayer.name = doc["name"].as<String>();
+      newPlayer.x = random(10, SCREEN_WIDTH - 10);
+      newPlayer.y = random(10, SCREEN_HEIGHT - 10);
+      newPlayer.active = true;
+      newPlayer.spottedTime = 0;
+      newPlayer.isSpotted = false;
+      
+      players.push_back(newPlayer);
+      
+      // Send acknowledgment
+      String response;
+      DynamicJsonDocument responseDoc(1024);
+      responseDoc["type"] = "registered";
+      responseDoc["id"] = newPlayer.id;
+      responseDoc["name"] = newPlayer.name;
+      serializeJson(responseDoc, response);
+      client->text(response);
+      
+      // Broadcast updated player list
+      broadcastGameState();
+      
+    } else if (messageType == "movePlayer") {
+      // Handle player movement
+      String playerId = String(client->id());
+      float newX = doc["x"];
+      float newY = doc["y"];
+      
+      // Update player position
+      for (auto& player : players) {
+        if (player.id == playerId) {
+          player.x = newX;
+          player.y = newY;
+          break;
+        }
+      }
+      
+      // No need to broadcast on every player move as we'll do periodic updates
+      
+    } else if (messageType == "startGame") {
+      // Start game if there are at least 2 players
+      if (players.size() >= 2 && !gameStarted) {
+        gameStarted = true;
+        gameStartTime = millis();
+        Serial.println("Game started!");
+        broadcastGameState();
+      }
+    }
+  }
+}
+
+// Send game state to all connected clients
+void broadcastGameState() {
+  String gameState;
+  DynamicJsonDocument doc(2048);
+  
+  doc["type"] = "gameState";
+  doc["gameStarted"] = gameStarted;
+  doc["adminX"] = adminX;
+  doc["adminY"] = adminY;
+  doc["spotlightRadius"] = spotlightRadius;
+  
+  if (gameStarted) {
+    unsigned long elapsedTime = millis() - gameStartTime;
+    if (elapsedTime > gameDuration) {
+      doc["timeRemaining"] = 0;
+      // Game over - players win if any are still active
+      bool playersWon = false;
+      for (const auto& player : players) {
+        if (player.active) {
+          playersWon = true;
+          break;
+        }
+      }
+      doc["gameOver"] = true;
+      doc["adminWon"] = !playersWon;
+    } else {
+      doc["timeRemaining"] = (gameDuration - elapsedTime) / 1000;
+      doc["gameOver"] = false;
+    }
+  } else {
+    doc["timeRemaining"] = gameDuration / 1000;
+    doc["gameOver"] = false;
+  }
+  
+  // Add player data
+  JsonArray playersArray = doc.createNestedArray("players");
+  for (const auto& player : players) {
+    JsonObject playerObj = playersArray.createNestedObject();
+    playerObj["id"] = player.id;
+    playerObj["name"] = player.name;
+    playerObj["x"] = player.x;
+    playerObj["y"] = player.y;
+    playerObj["active"] = player.active;
+    playerObj["isSpotted"] = player.isSpotted;
+  }
+  
+  serializeJson(doc, gameState);
+  ws.textAll(gameState);
 }

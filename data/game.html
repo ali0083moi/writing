@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP32 Spotlight Hunt - Game</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>ESP32 Spotlight Hunt</h1>
+
+      <div class="game-info">
+        <div>Players: <span id="playerCount">0</span></div>
+        <div>Time: <span id="timeRemaining">180</span>s</div>
+      </div>
+
+      <div class="game-container" id="gameContainer">
+        <!-- Game elements will be added here by JavaScript -->
+        <div class="spotlight" id="spotlight"></div>
+        <div class="game-message" id="gameMessage"></div>
+      </div>
+
+      <div class="player-list" id="playerList">
+        <!-- Player list will be populated by JavaScript -->
+      </div>
+
+      <div class="controls">
+        <p>Click and drag inside the game area to move your player</p>
+        <p id="statusMessage">Waiting for the game to start...</p>
+        <button id="startGameBtn" class="btn" style="display: none">
+          Start Game
+        </button>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

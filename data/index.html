@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP32 Multiplayer Game</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>ESP32 Spotlight Hunt</h1>
+      <p>Enter your name to join the game:</p>
+      <form action="/login" method="POST">
+        <div class="form-group">
+          <label for="playerName">Your Name:</label>
+          <input
+            type="text"
+            id="playerName"
+            name="playerName"
+            required
+            minlength="2"
+            maxlength="15"
+          />
+        </div>
+        <button type="submit" class="btn">Join Game</button>
+      </form>
+      <div class="info">
+        <h2>How to Play</h2>
+        <ul>
+          <li>The admin controls a spotlight with joystick on ESP32</li>
+          <li>Players need to avoid being in the spotlight</li>
+          <li>If you stay in the spotlight for 3 seconds, you're eliminated</li>
+          <li>Players win if at least one survives for 3 minutes</li>
+          <li>Admin wins if all players are eliminated</li>
+        </ul>
+      </div>
+    </div>
+  </body>
+</html>

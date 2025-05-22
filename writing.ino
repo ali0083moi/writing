@@ -87,6 +87,48 @@ namespace DinoGame {
   const unsigned long scoreIncrementInterval = 100; // Increment score every 100ms when not game over
 }
 
+// Crossy Road Game Variables
+namespace CrossyRoadGame {
+  // Player (Chicken)
+  int playerX, playerY;
+  const int playerSize = 6;
+  const int playerStep = 8; // How many pixels the player moves at a time
+
+  // Obstacles (Cars)
+  struct Car {
+    int x, y;         // Position (y is lane y-coordinate)
+    int width, height;
+    int speed;        // Can be negative for leftward movement
+    uint16_t color;   // For now, always SH110X_WHITE
+  };
+  std::vector<Car> cars;
+  const int numLanes = 5;
+  int laneYPositions[numLanes];
+  const int carMinHeight = 8;
+  const int carMaxHeight = 10;
+  const int carMinWidth = 15;
+  const int carMaxWidth = 30;
+  const int carMinSpeed = 1;
+  const int carMaxSpeed = 3; 
+
+  // Game State
+  bool gameOverCR = false;
+  int scoreCR = 0;
+  const int topSafeZoneY = 5; // Y-coordinate chicken needs to reach
+  unsigned long lastPlayerMoveTime = 0;
+  const unsigned long playerMoveCooldown = 150; // ms between player moves
+
+  // Forward declarations for Crossy Road
+  void resetCrossyRoadGame();
+  void handleCrossyRoadInput();
+  void drawPlayerCR();
+  void drawObstaclesCR();
+  void updateObstaclesCR();
+  void checkCollisionsCR();
+  void checkWinConditionCR();
+  void displayGameOverCR();
+} // namespace CrossyRoadGame
+
 // Function Prototypes
 void displayMenu();
 void handleMenuInput();
@@ -142,8 +184,13 @@ void loop() {
       }
       break;
     case CROSSY_ROAD:
-      // Placeholder for Crossy Road
-      runCrossyRoad();
+      if (CrossyRoadGame::gameOverCR) {
+        CrossyRoadGame::displayGameOverCR();
+        CrossyRoadGame::handleCrossyRoadInput(); // To catch restart
+      } else {
+        CrossyRoadGame::handleCrossyRoadInput();
+        runCrossyRoad(); // This will call the internal logic
+      }
       break;
     case AIRPLANE:
       // Placeholder for Airplane
@@ -244,11 +291,16 @@ void handleMenuInput() {
 
   // Selection (single click) - now driven by the flag from checkJoystickEvents
   if (singleClickForMenu) {
-    // Reset game if re-entering
-    if (static_cast<GameState>(selectedGame + 1) == GOOGLE_DINO) {
+    GameState newGameState = static_cast<GameState>(selectedGame + 1);
+    // Reset game if re-entering or entering for the first time
+    if (newGameState == GOOGLE_DINO) {
         resetDinoGame();
+    } else if (newGameState == CROSSY_ROAD) {
+        CrossyRoadGame::resetCrossyRoadGame();
     }
-    currentGameState = static_cast<GameState>(selectedGame + 1); // MENU is 0, games start from 1
+    // Add other game resets here if needed
+
+    currentGameState = newGameState; // MENU is 0, games start from 1
     Serial.print("Selected game (single click): "); Serial.println(gameNames[selectedGame]);
     
     clickCount = 0;          // Consume the click sequence
@@ -488,16 +540,204 @@ void runGoogleDino() {
 }
 
 
-// --- Placeholder Game Functions ---
-void runCrossyRoad() {
-  display.clearDisplay();
-  display.setCursor(10, SCREEN_HEIGHT / 2 - 5);
-  display.setTextSize(1);
-  display.println("Crossy Road - WIP");
-  // display.display() is called in loop()
-  // Implement double click to go back to menu, or single click for game specific action
+// --- Crossy Road Game Functions ---
+void CrossyRoadGame::resetCrossyRoadGame() {
+  playerX = SCREEN_WIDTH / 2 - playerSize / 2;
+  playerY = SCREEN_HEIGHT - playerSize - 2; // Start at the bottom
+  scoreCR = 0;
+  gameOverCR = false;
+  cars.clear();
+
+  // Initialize lane Y positions (top-down)
+  int laneHeight = (SCREEN_HEIGHT - topSafeZoneY - playerSize - 10) / numLanes; // available height / lanes
+  for (int i = 0; i < numLanes; ++i) {
+    laneYPositions[i] = topSafeZoneY + 5 + (i * laneHeight) + carMaxHeight/2 ;
+  }
+
+  // Create cars for each lane
+  for (int i = 0; i < numLanes; ++i) {
+    Car newCar;
+    newCar.y = laneYPositions[i] - carMaxHeight/2; // Center car vertically in its conceptual lane space
+    newCar.width = random(carMinWidth, carMaxWidth + 1);
+    newCar.height = random(carMinHeight, carMaxHeight + 1);
+    newCar.speed = random(carMinSpeed, carMaxSpeed + 1);
+    if (random(0, 2) == 0) { // Random direction
+      newCar.speed *= -1;
+    }
+    if (newCar.speed > 0) { // Moving right
+        newCar.x = random(0, SCREEN_WIDTH / 2) * -1; // Start off-screen to the left
+    } else { // Moving left
+        newCar.x = SCREEN_WIDTH + random(0, SCREEN_WIDTH / 2); // Start off-screen to the right
+    }
+    newCar.color = SH110X_WHITE;
+    cars.push_back(newCar);
+
+    // Optionally, add a second car to some lanes for more density
+    if (i % 2 == 0 && numLanes > 2) { // Add to alternating lanes
+      Car newCar2 = newCar;
+      newCar2.width = random(carMinWidth, carMaxWidth + 1);
+      newCar2.height = random(carMinHeight, carMaxHeight+1);
+      // Ensure it doesn't overlap too much with the first car initially
+      if (newCar2.speed > 0) { 
+          newCar2.x = newCar.x - newCar.width - random(30, 80);
+      } else {
+          newCar2.x = newCar.x + newCar.width + random(30, 80);
+      }
+      // Ensure it's still in a reasonable starting range relative to the first car
+      if (newCar2.x < -newCar2.width - SCREEN_WIDTH) newCar2.x = -newCar2.width - random(10,50);
+      if (newCar2.x > SCREEN_WIDTH * 2) newCar2.x = SCREEN_WIDTH + random(10,50);
+      cars.push_back(newCar2);
+    }
+  }
+  lastPlayerMoveTime = millis(); // Allow immediate first move
 }
 
+void CrossyRoadGame::drawPlayerCR() {
+  display.fillRect(playerX, playerY, playerSize, playerSize, SH110X_WHITE);
+}
+
+void CrossyRoadGame::drawObstaclesCR() {
+  for (const auto& car : cars) {
+    display.fillRect(car.x, car.y, car.width, car.height, car.color);
+  }
+}
+
+void CrossyRoadGame::updateObstaclesCR() {
+  for (auto& car : cars) {
+    car.x += car.speed;
+    // Wrap around logic
+    if (car.speed > 0 && car.x > SCREEN_WIDTH) { // Moving right, off right edge
+      car.x = -car.width - random(5, 50); // Reappear on the left, with some gap
+    } else if (car.speed < 0 && car.x + car.width < 0) { // Moving left, off left edge
+      car.x = SCREEN_WIDTH + random(5, 50); // Reappear on the right, with some gap
+    }
+  }
+}
+
+void CrossyRoadGame::checkCollisionsCR() {
+  for (const auto& car : cars) {
+    // AABB collision detection
+    if (playerX < car.x + car.width &&
+        playerX + playerSize > car.x &&
+        playerY < car.y + car.height &&
+        playerY + playerSize > car.y) {
+      gameOverCR = true;
+      Serial.println("Crossy Road: Collision!");
+      return;
+    }
+  }
+}
+
+void CrossyRoadGame::checkWinConditionCR() {
+  if (playerY <= topSafeZoneY) {
+    scoreCR++;
+    Serial.print("Crossy Road: Reached top! Score: "); Serial.println(scoreCR);
+    // Reset player to start for another run
+    playerX = SCREEN_WIDTH / 2 - playerSize / 2;
+    playerY = SCREEN_HEIGHT - playerSize - 2;
+    // Optionally, could increase difficulty here (e.g., car speeds)
+    lastPlayerMoveTime = millis(); // Allow immediate move after scoring
+  }
+}
+
+void CrossyRoadGame::handleCrossyRoadInput() {
+  unsigned long currentTime = millis();
+
+  if (gameOverCR) {
+    // Simplified click detection for restart (similar to Dino game)
+    int currentJoySWStateForRestart = digitalRead(JOY_SW_PIN);
+    static int lastJoySWStateForRestartCR = HIGH;
+    static unsigned long lastPressTimeForRestartCR = 0;
+
+    if (currentJoySWStateForRestart == LOW && lastJoySWStateForRestartCR == HIGH && (currentTime - lastPressTimeForRestartCR > debounceDelay)) {
+        lastPressTimeForRestartCR = currentTime;
+        Serial.println("Crossy Road: Restarting game.");
+        resetCrossyRoadGame(); 
+    }
+    lastJoySWStateForRestartCR = currentJoySWStateForRestart;
+    return;
+  }
+
+  if (currentTime - lastPlayerMoveTime > playerMoveCooldown) {
+    int joyXVal = analogRead(JOY_VRX_PIN);
+    int joyYVal = analogRead(JOY_VRY_PIN);
+
+    bool moved = false;
+    if (joyYVal < JOYSTICK_THRESHOLD_LOW) { // Up
+      playerY -= playerStep;
+      moved = true;
+    } else if (joyYVal > JOYSTICK_THRESHOLD_HIGH) { // Down
+      playerY += playerStep;
+      moved = true;
+    } else if (joyXVal < JOYSTICK_THRESHOLD_LOW) { // Left
+      playerX -= playerStep;
+      moved = true;
+    } else if (joyXVal > JOYSTICK_THRESHOLD_HIGH) { // Right
+      playerX += playerStep;
+      moved = true;
+    }
+
+    if (moved) {
+      // Constrain player to screen boundaries
+      if (playerX < 0) playerX = 0;
+      if (playerX + playerSize > SCREEN_WIDTH) playerX = SCREEN_WIDTH - playerSize;
+      if (playerY < 0) playerY = 0; // Allow reaching very top temporarily for win check
+      if (playerY + playerSize > SCREEN_HEIGHT) playerY = SCREEN_HEIGHT - playerSize;
+      lastPlayerMoveTime = currentTime;
+    }
+  }
+}
+
+void CrossyRoadGame::displayGameOverCR() {
+  display.clearDisplay();
+  int16_t x1, y1;
+  uint16_t w, h;
+
+  display.setTextSize(2);
+  const char* gameOverText = "Game Over";
+  display.getTextBounds(gameOverText, 0, 0, &x1, &y1, &w, &h);
+  display.setCursor((SCREEN_WIDTH - w) / 2, SCREEN_HEIGHT / 2 - 15);
+  display.println(gameOverText);
+
+  display.setTextSize(1);
+  String scoreStr = "Score: " + String(scoreCR);
+  display.getTextBounds(scoreStr.c_str(), 0, 0, &x1, &y1, &w, &h);
+  display.setCursor((SCREEN_WIDTH - w) / 2, SCREEN_HEIGHT / 2 + 5);
+  display.println(scoreStr);
+
+  const char* restartText = "Click to Restart";
+  display.getTextBounds(restartText, 0, 0, &x1, &y1, &w, &h);
+  display.setCursor((SCREEN_WIDTH - w) / 2, SCREEN_HEIGHT / 2 + 15);
+  display.println(restartText);
+}
+
+void runCrossyRoad() {
+  using namespace CrossyRoadGame;
+  // Note: Input handling is called from the main loop based on gameOverCR state
+  
+  updateObstaclesCR();
+  checkCollisionsCR(); // Check collisions after moving obstacles and before player moves (or after)
+  
+  if (!gameOverCR) {
+    checkWinConditionCR(); // Check if player reached the top
+  }
+
+  // Drawing
+  display.clearDisplay();
+  drawPlayerCR();
+  drawObstaclesCR();
+
+  // Display Score during gameplay
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(SCREEN_WIDTH - 30, 0);
+  display.print("S:");
+  display.println(scoreCR);
+
+  // display.display() is called in the main loop()
+}
+
+// --- Placeholder Game Functions ---
 void runAirplane() {
   display.clearDisplay();
   display.setCursor(10, SCREEN_HEIGHT / 2 - 5);

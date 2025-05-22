@@ -54,18 +54,116 @@ bool singleClickForMenu = false; // Flag for menu selection
 
 // Google Dino Game Variables
 namespace DinoGame {
+  // --- Bitmaps ---
+  // Standing Dino Frame 1 (24w x 17h - from user)
+  const unsigned char dino_stand_frame1_bmp[] PROGMEM = {
+    0b00000000, 0b11111111, 0b00000000, //         ********
+    0b00000011, 0b11111111, 0b11000000, //       ************
+    0b00000011, 0b11111111, 0b11000000, //       ************
+    0b00000011, 0b11111111, 0b11000000, //       ************
+    0b00000011, 0b11110000, 0b00000000, //       ****
+    0b00000011, 0b11111111, 0b00000000, //       *********
+    0b00000001, 0b11111111, 0b00000000, //        ********
+    0b00000011, 0b11111111, 0b11000000, //       ************
+    0b00000111, 0b11111111, 0b11100000, //      **************
+    0b00000111, 0b11111111, 0b11100000, //      **************
+    0b00000011, 0b11111111, 0b11000000, //       ************
+    0b00000001, 0b11111111, 0b10000000, //        ***********
+    0b00000000, 0b11111111, 0b00000000, //         **********
+    0b00000000, 0b01110011, 0b00000000, //          ***  **
+    0b00000000, 0b00110001, 0b00000000, //           **   *
+    0b00000000, 0b00010000, 0b10000000, //            *    *
+    0b00000000, 0b00110000, 0b11000000  //           **    **
+  };
+
+  // Standing Dino Frame 2 (for walking animation, 24w x 17h)
+  const unsigned char dino_stand_frame2_bmp[] PROGMEM = {
+    0b00000000, 0b11111111, 0b00000000, // Row 0
+    0b00000011, 0b11111111, 0b11000000, // Row 1
+    0b00000011, 0b11111111, 0b11000000, // Row 2
+    0b00000011, 0b11111111, 0b11000000, // Row 3
+    0b00000011, 0b11110000, 0b00000000, // Row 4
+    0b00000011, 0b11111111, 0b00000000, // Row 5
+    0b00000001, 0b11111111, 0b00000000, // Row 6
+    0b00000011, 0b11111111, 0b11000000, // Row 7
+    0b00000111, 0b11111111, 0b11100000, // Row 8
+    0b00000111, 0b11111111, 0b11100000, // Row 9
+    0b00000011, 0b11111111, 0b11000000, // Row 10
+    0b00000001, 0b11111111, 0b10000000, // Row 11
+    0b00000000, 0b11111111, 0b00000000, // Row 12
+    0b00000000, 0b01100110, 0b00000000, // Row 13 (Legs changed)
+    0b00000000, 0b00100010, 0b00000000, // Row 14 (Legs changed)
+    0b00000000, 0b00010001, 0b10000000, // Row 15 (Legs changed)
+    0b00000000, 0b00010001, 0b11000000  // Row 16 (Legs changed)
+  };
+  const int DINO_STAND_WIDTH = 24;
+  const int DINO_STAND_HEIGHT = 17;
+
+  // Ducking Dino (approx 22w x 10h)
+  const unsigned char dino_duck_bmp[] PROGMEM = {
+    0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000,
+    0b00011111, 0b11111110, 0b00000000,
+    0b00111111, 0b11111111, 0b11000000,
+    0b01111111, 0b11111111, 0b11000000,
+    0b11111111, 0b11111000, 0b00000000,
+    0b01110011, 0b11001100, 0b00000000,
+    0b00110011, 0b00001100, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000
+  };
+  const int DINO_DUCK_WIDTH = 22;
+  const int DINO_DUCK_HEIGHT = 10;
+
+  // Cactus Type 1 (10w x 13h - from user diff observation)
+  const unsigned char cactus_1_bmp[] PROGMEM = {
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000, //    **
+    0b11011011, 0b00000000, // ** ** ** (arms)
+    0b11011011, 0b00000000, // ** ** **
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000, //    **
+    0b00011000, 0b00000000  //    **
+  };
+  const int CACTUS_1_WIDTH = 10;
+  const int CACTUS_1_HEIGHT = 13; // Corrected height
+
+  // Cloud Bitmap (20w x 8h)
+  const unsigned char cloud_1_bmp[] PROGMEM = {
+    0b00000000, 0b00000000, 0b00000000,
+    0b00000111, 0b11100000, 0b00000000,
+    0b00011111, 0b11111000, 0b00000000,
+    0b00111111, 0b11111110, 0b00000000,
+    0b00111111, 0b11111110, 0b00000000,
+    0b00011111, 0b11111000, 0b00000000,
+    0b00000111, 0b11100000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000
+  };
+  const int CLOUD_1_WIDTH = 20;
+  const int CLOUD_1_HEIGHT = 8;
+  // --- End Bitmaps ---
+
+  // Ground line
+  const int groundLineY = SCREEN_HEIGHT - 12; // Y position of the ground line surface
+
   // Dino properties
   int dinoX = 10;
-  int dinoY = SCREEN_HEIGHT - 20; // Initial Y position
-  int dinoBaseY = SCREEN_HEIGHT - 20;
-  int dinoWidth = 15;
-  int dinoHeight = 20;
+  int dinoBaseY = groundLineY - DINO_STAND_HEIGHT;
+  int dinoY = dinoBaseY;
   bool isJumping = false;
   bool isDucking = false;
-  float jumpVelocity = 0;
+  float jumpVelocity = 1; // User changed
   const float gravity = 0.6;
-  const float jumpPower = -10; // Negative for upward movement
-  int duckHeight = 10;
+  const float jumpPower = -5; // User changed
+  bool dinoIsWalkFrame1 = true;
+  unsigned long lastDinoWalkTime = 0;
+  const int dinoWalkInterval = 180; // milliseconds for walk animation frame
 
   // Obstacle properties
   struct Obstacle {
@@ -73,18 +171,33 @@ namespace DinoGame {
     int y;
     int width;
     int height;
-    bool isBird; // true for bird, false for cactus
+    bool isBird;
+    const unsigned char* bmp;
   };
   std::vector<Obstacle> obstacles;
   int obstacleSpeed = 2;
   unsigned long lastObstacleSpawnTime = 0;
-  unsigned long obstacleSpawnInterval = 2000; // milliseconds
+  unsigned long obstacleSpawnInterval = 2000;
+
+  // Cloud properties
+  struct Cloud {
+    float x; // Use float for smoother movement
+    int y;
+    float speed;
+    const unsigned char* bmp;
+    int width;
+    int height;
+  };
+  std::vector<Cloud> clouds;
+  const int MAX_CLOUDS = 3;
+  const float CLOUD_MIN_SPEED = 0.2f;
+  const float CLOUD_MAX_SPEED = 0.5f;
 
   // Game state
   bool gameOver = false;
   int score = 0;
   unsigned long lastScoreIncrementTime = 0;
-  const unsigned long scoreIncrementInterval = 100; // Increment score every 100ms when not game over
+  const unsigned long scoreIncrementInterval = 100;
 }
 
 // Crossy Road Game Variables
@@ -144,6 +257,9 @@ void runCrossyRoad();
 void runAirplane();
 void runTetris();
 void checkJoystickEvents();
+void drawGroundLine();
+void drawClouds();    // New prototype
+void updateClouds();  // New prototype
 
 
 void setup() {
@@ -317,31 +433,79 @@ void handleMenuInput() {
 void resetDinoGame() {
   using namespace DinoGame;
   dinoX = 10;
+  dinoBaseY = groundLineY - DINO_STAND_HEIGHT;
   dinoY = dinoBaseY;
   isJumping = false;
   isDucking = false;
-  jumpVelocity = 0;
+  jumpVelocity = 1; // Keep user change
   obstacles.clear();
   gameOver = false;
   score = 0;
   obstacleSpeed = 2;
-  lastObstacleSpawnTime = millis(); // Start spawning immediately
-  obstacleSpawnInterval = 2000 + random(0,1000); // Randomize first spawn
+  lastObstacleSpawnTime = millis();
+  obstacleSpawnInterval = 2000 + random(0,1000);
+  dinoIsWalkFrame1 = true;
+  lastDinoWalkTime = millis();
+
+  // Initialize clouds
+  clouds.clear();
+  for (int i = 0; i < MAX_CLOUDS; ++i) {
+    Cloud newCloud;
+    newCloud.x = random(0, SCREEN_WIDTH + SCREEN_WIDTH / 2); // Some on screen, some off to the right
+    newCloud.y = random(5, groundLineY - DINO_STAND_HEIGHT - CLOUD_1_HEIGHT - 10); // Above dino's head range
+    newCloud.speed = (random( (int)(CLOUD_MIN_SPEED * 100), (int)(CLOUD_MAX_SPEED * 100) ) / 100.0f);
+    newCloud.bmp = cloud_1_bmp;
+    newCloud.width = CLOUD_1_WIDTH;
+    newCloud.height = CLOUD_1_HEIGHT;
+    clouds.push_back(newCloud);
+  }
 }
 
 void drawDino() {
   using namespace DinoGame;
   display.setTextColor(SH110X_WHITE);
-  int currentDinoHeight = isDucking ? duckHeight : dinoHeight;
-  int currentDinoY = isDucking ? dinoBaseY + (dinoHeight - duckHeight) : dinoY;
-  display.fillRect(dinoX, currentDinoY, dinoWidth, currentDinoHeight, SH110X_WHITE);
+
+  const unsigned char* currentBmp;
+  int currentWidth, currentHeight;
+  int currentDrawY = dinoY;
+
+  if (isDucking) {
+    currentBmp = dino_duck_bmp;
+    currentWidth = DINO_DUCK_WIDTH;
+    currentHeight = DINO_DUCK_HEIGHT;
+    currentDrawY = groundLineY - DINO_DUCK_HEIGHT;
+    if (isJumping) { 
+        currentDrawY = dinoY; 
+    }
+  } else {
+    currentWidth = DINO_STAND_WIDTH;
+    currentHeight = DINO_STAND_HEIGHT;
+    if (!isJumping) { // Only animate walking if on the ground
+      if (millis() - lastDinoWalkTime > dinoWalkInterval) {
+        dinoIsWalkFrame1 = !dinoIsWalkFrame1;
+        lastDinoWalkTime = millis();
+      }
+      currentBmp = dinoIsWalkFrame1 ? dino_stand_frame1_bmp : dino_stand_frame2_bmp;
+      currentDrawY = groundLineY - DINO_STAND_HEIGHT; // Ensure on ground if not jumping
+    } else { // Jumping
+      currentBmp = dino_stand_frame1_bmp; // Static frame while jumping
+      // currentDrawY is already dinoY (dynamic)
+    }
+  }
+  display.drawBitmap(dinoX, currentDrawY, currentBmp, currentWidth, currentHeight, SH110X_WHITE);
 }
 
 void drawObstacles() {
   using namespace DinoGame;
   display.setTextColor(SH110X_WHITE);
   for (const auto& obs : obstacles) {
-    display.fillRect(obs.x, obs.y, obs.width, obs.height, SH110X_WHITE);
+    if (obs.bmp) {
+        display.drawBitmap(obs.x, obs.y, obs.bmp, obs.width, obs.height, SH110X_WHITE);
+    } else if (obs.isBird) {
+        display.fillRect(obs.x, obs.y, obs.width, obs.height, SH110X_WHITE);
+    } else {
+        display.fillRect(obs.x, obs.y, obs.width, obs.height, SH110X_WHITE);
+    }
   }
 }
 
@@ -349,49 +513,40 @@ void updateObstacles() {
   using namespace DinoGame;
   unsigned long currentTime = millis();
 
-  // Move existing obstacles
   for (size_t i = 0; i < obstacles.size(); ++i) {
     obstacles[i].x -= obstacleSpeed;
-    // Remove obstacles that are off-screen
     if (obstacles[i].x + obstacles[i].width < 0) {
       obstacles.erase(obstacles.begin() + i);
-      i--; // Adjust index after removal
-      score++; // Increment score for passing an obstacle
+      i--;
     }
   }
 
-  // Spawn new obstacles
   if (currentTime - lastObstacleSpawnTime > obstacleSpawnInterval) {
     lastObstacleSpawnTime = currentTime;
-    obstacleSpawnInterval = 1500 + random(0, 1500) - (score * 10); // Decrease interval as score increases
-    if (obstacleSpawnInterval < 500) obstacleSpawnInterval = 500; // Minimum spawn interval
+    obstacleSpawnInterval = 1800 + random(0, 1200) - (score * 15);
+    if (obstacleSpawnInterval < 600) obstacleSpawnInterval = 600;
 
     Obstacle newObs;
     newObs.x = SCREEN_WIDTH;
-    newObs.width = 10 + random(0,10); // Random width
 
-    if (random(0, 3) == 0) { // 1 in 3 chance for a bird
+    if (random(0, 4) == 0 && false) { // Birds still disabled
         newObs.isBird = true;
+        newObs.width = 12; 
         newObs.height = 8 + random(0,5);
-        // Birds can be at two heights: one dino can jump, one dino must duck
+        newObs.bmp = nullptr;
         if (random(0,2) == 0) {
-             newObs.y = dinoBaseY - newObs.height - 5 - random(0,5) ; // Higher bird, requires ducking or precise jump
+             newObs.y = dinoBaseY - newObs.height - 10 - random(0,5) ;
         } else {
-             newObs.y = dinoBaseY - newObs.height + 5 ; // Lower bird, jumpable
+             newObs.y = dinoBaseY - newObs.height - random(0,3);
         }
-
     } else { // Cactus
         newObs.isBird = false;
-        newObs.height = 15 + random(0,15);
-        newObs.y = SCREEN_HEIGHT - newObs.height;
+        newObs.bmp = cactus_1_bmp;
+        newObs.width = CACTUS_1_WIDTH;
+        newObs.height = CACTUS_1_HEIGHT;
+        newObs.y = groundLineY - newObs.height;
     }
     obstacles.push_back(newObs);
-    
-    // Increase speed over time/score
-    if (score > 0 && score % 5 == 0) { // Every 5 points
-        obstacleSpeed++;
-        if (obstacleSpeed > 6) obstacleSpeed = 6; // Max speed
-    }
   }
 }
 
@@ -450,18 +605,28 @@ void handleGoogleDinoInput() {
 
 void checkCollisions() {
   using namespace DinoGame;
-  int currentDinoHeight = isDucking ? duckHeight : dinoHeight;
-  int currentDinoY = isDucking ? dinoBaseY + (dinoHeight - duckHeight) : dinoY;
+  int currentDinoCollisionY;
+  int currentDinoCollisionWidth;
+  int currentDinoCollisionHeight;
+
+  if (isDucking) {
+    currentDinoCollisionWidth = DINO_DUCK_WIDTH;
+    currentDinoCollisionHeight = DINO_DUCK_HEIGHT;
+    currentDinoCollisionY = groundLineY - DINO_DUCK_HEIGHT;
+     if (isJumping) currentDinoCollisionY = dinoY;
+  } else {
+    currentDinoCollisionWidth = DINO_STAND_WIDTH;
+    currentDinoCollisionHeight = DINO_STAND_HEIGHT;
+    currentDinoCollisionY = dinoY;
+  }
 
   for (const auto& obs : obstacles) {
-    // Simple AABB collision detection
-    // Dino: dinoX, currentDinoY, dinoWidth, currentDinoHeight
-    // Obstacle: obs.x, obs.y, obs.width, obs.height
     if (dinoX < obs.x + obs.width &&
-        dinoX + dinoWidth > obs.x &&
-        currentDinoY < obs.y + obs.height &&
-        currentDinoY + currentDinoHeight > obs.y) {
+        dinoX + currentDinoCollisionWidth > obs.x &&
+        currentDinoCollisionY < obs.y + obs.height &&
+        currentDinoCollisionY + currentDinoCollisionHeight > obs.y) {
       gameOver = true;
+      Serial.println("Collision with Dino Game object!");
       return;
     }
   }
@@ -498,45 +663,79 @@ void displayGameOver() {
 
 void runGoogleDino() {
   using namespace DinoGame;
-  display.clearDisplay();
-
-  // Update dino position (jump physics)
+  
   if (isJumping) {
     dinoY += jumpVelocity;
     jumpVelocity += gravity;
-    if (dinoY >= dinoBaseY) {
-      dinoY = dinoBaseY;
+    if (dinoY >= (groundLineY - (isDucking ? DINO_DUCK_HEIGHT : DINO_STAND_HEIGHT))) {
+      dinoY = groundLineY - (isDucking ? DINO_DUCK_HEIGHT : DINO_STAND_HEIGHT);
       isJumping = false;
-      jumpVelocity = 0;
+      jumpVelocity = 1; // Reset to initial jump impulse value (user changed)
+      if (isDucking) {
+          dinoY = groundLineY - DINO_DUCK_HEIGHT;
+      } else {
+          dinoY = groundLineY - DINO_STAND_HEIGHT;
+      }
     }
+  } else if (!isDucking) {
+     dinoY = groundLineY - DINO_STAND_HEIGHT;
+  } else { 
+     dinoY = groundLineY - DINO_DUCK_HEIGHT;
   }
 
   updateObstacles();
+  updateClouds(); // Update cloud positions
   checkCollisions();
   
   if (!gameOver) {
-    // Increment score over time
     if(millis() - lastScoreIncrementTime > scoreIncrementInterval) {
         score++;
         lastScoreIncrementTime = millis();
+        if (score > 0 && score % 8 == 0) { 
+            if (obstacleSpeed < 6) obstacleSpeed++;
+        }
+        if (score > 0 && score % 12 == 0) {
+            if (obstacleSpawnInterval > 650) obstacleSpawnInterval -= 75;
+        }
     }
   }
 
-
-  // Drawing
+  display.clearDisplay();
+  drawClouds();      // Draw clouds first (background)
+  drawGroundLine();
   drawDino();
   drawObstacles();
 
-  // Display Score
   display.setCursor(SCREEN_WIDTH - 40, 0);
   display.print("S: ");
   display.println(score);
-  
-  // Display current game mode (optional, for debugging)
-  // display.setCursor(0,0);
-  // display.print("DINO");
+}
 
-  // display.display() is called in loop()
+// New function to draw the ground line
+void drawGroundLine() {
+  using namespace DinoGame; // To access groundLineY
+  display.drawLine(0, groundLineY, SCREEN_WIDTH - 1, groundLineY, SH110X_WHITE);
+}
+
+// New function to draw clouds
+void drawClouds() {
+  using namespace DinoGame;
+  for (const auto& cloud : clouds) {
+    display.drawBitmap((int)cloud.x, cloud.y, cloud.bmp, cloud.width, cloud.height, SH110X_WHITE);
+  }
+}
+
+// New function to update clouds
+void updateClouds() {
+  using namespace DinoGame;
+  for (auto& cloud : clouds) {
+    cloud.x -= cloud.speed;
+    if (cloud.x + cloud.width < 0) { // If cloud moved off screen to the left
+      cloud.x = SCREEN_WIDTH + random(0, SCREEN_WIDTH / 4); // Reappear on the right
+      cloud.y = random(5, groundLineY - DINO_STAND_HEIGHT - CLOUD_1_HEIGHT - 10); // New random Y
+      cloud.speed = (random( (int)(CLOUD_MIN_SPEED * 100), (int)(CLOUD_MAX_SPEED * 100) ) / 100.0f); // New random speed
+    }
+  }
 }
 
 

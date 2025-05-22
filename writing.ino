@@ -147,7 +147,36 @@ namespace DinoGame {
   };
   const int CLOUD_1_WIDTH = 20;
   const int CLOUD_1_HEIGHT = 8;
-  // --- End Bitmaps ---
+
+  // Bird Frame 1 (16w x 10h)
+  const unsigned char bird_frame1_bmp[] PROGMEM = {
+    0b00000000, 0b00000000, // 
+    0b00000110, 0b00000000, //      **
+    0b00001111, 0b00000000, //     ****
+    0b00011111, 0b11000000, //    ******** (body & head)
+    0b00111111, 0b11100000, //   **********
+    0b01111000, 0b11110000, //  *****  **** (wing up)
+    0b00110000, 0b01110000, //   **     ***
+    0b00010000, 0b00110000, //    *      **
+    0b00000000, 0b00000000, // 
+    0b00000000, 0b00000000  // 
+  };
+  // Bird Frame 2 (16w x 10h)
+  const unsigned char bird_frame2_bmp[] PROGMEM = {
+    0b00000000, 0b00000000, // 
+    0b00000000, 0b00000000, // 
+    0b00000110, 0b00000000, //      **
+    0b00001111, 0b00000000, //     ****
+    0b00011111, 0b11000000, //    ******** (body & head)
+    0b00111111, 0b11100000, //   **********
+    0b01111000, 0b11110000, //  *****  **** (wing down)
+    0b00110000, 0b01110000, //   **     ***
+    0b00010000, 0b00110000, //    *      **
+    0b00000000, 0b00000000  // 
+  };
+  const int BIRD_WIDTH = 16;
+  const int BIRD_HEIGHT = 10;
+  const int BIRD_ANIM_INTERVAL = 200; // ms for bird flapping
 
   // Ground line
   const int groundLineY = SCREEN_HEIGHT - 12; // Y position of the ground line surface
@@ -173,6 +202,10 @@ namespace DinoGame {
     int height;
     bool isBird;
     const unsigned char* bmp;
+    // Bird animation properties
+    bool isFrame1; // For bird animation
+    unsigned long lastAnimTime; // For bird animation
+    // animInterval is global BIRD_ANIM_INTERVAL for now
   };
   std::vector<Obstacle> obstacles;
   int obstacleSpeed = 2;
@@ -202,34 +235,81 @@ namespace DinoGame {
 
 // Crossy Road Game Variables
 namespace CrossyRoadGame {
+  // --- Bitmaps for Crossy Road ---
+  // Chicken Frame 1 (8w x 8h)
+  const unsigned char chicken_frame1_bmp[] PROGMEM = {
+    0b00111100, //   ****
+    0b01111110, //  ******
+    0b11111111, // ********
+    0b11011011, // ** * ** (eyes)
+    0b11111111, // ********
+    0b01111110, //  ******
+    0b00100100, //   *  *
+    0b00100100  //   *  * (feet)
+  };
+  // Chicken Frame 2 (8w x 8h)
+  const unsigned char chicken_frame2_bmp[] PROGMEM = {
+    0b00111100, //   ****
+    0b01111110, //  ******
+    0b11111111, // ********
+    0b11011011, // ** * ** (eyes)
+    0b11111111, // ********
+    0b01111110, //  ******
+    0b01000010, //  *    * (feet spread)
+    0b01000010  //  *    * 
+  };
+  const int CHICKEN_WIDTH = 8;
+  const int CHICKEN_HEIGHT = 8;
+
+  // Car Type 1 (Sedan-like, 18w x 10h)
+  const unsigned char car_type1_bmp[] PROGMEM = {
+    0b00000000, 0b00000000, 0b00000000, //Line 0
+    0b00011111, 0b11111000, 0b00000000, //   ************ (roof)
+    0b00111111, 0b11111110, 0b00000000, //  **************
+    0b01111111, 0b11111111, 0b10000000, // ******************
+    0b11111111, 0b11111111, 0b11000000, // ******************** (body)
+    0b11111111, 0b11111111, 0b11000000, // ********************
+    0b01111111, 0b11111111, 0b10000000, // ******************
+    0b00000000, 0b00000000, 0b00000000, //Line 7 (gap)
+    0b00110000, 0b00001100, 0b00000000, //   **      **   (wheels)
+    0b00110000, 0b00001100, 0b00000000  //   **      **
+  };
+  const int CAR_TYPE1_WIDTH = 18;
+  const int CAR_TYPE1_HEIGHT = 10;
+
+  // Car speed variables (will be initialized in reset)
+  int currentCarMinSpeed;
+  int currentCarMaxSpeed;
+  const int BASE_CAR_MIN_SPEED = 1;
+  const int BASE_CAR_MAX_SPEED = 2;
+  const int MAX_POSSIBLE_CAR_MIN_SPEED = 3;
+  const int MAX_POSSIBLE_CAR_MAX_SPEED = 4;
+
+  // --- End Bitmaps ---
+
   // Player (Chicken)
   int playerX, playerY;
-  const int playerSize = 6;
-  const int playerStep = 8; // How many pixels the player moves at a time
+  bool chickenIsFrame1 = true;
+  unsigned long lastChickenAnimTime = 0;
+  const int chickenAnimInterval = 250; // ms for chicken animation frame
 
   // Obstacles (Cars)
   struct Car {
     int x, y;         // Position (y is lane y-coordinate)
     int width, height;
     int speed;        // Can be negative for leftward movement
-    uint16_t color;   // For now, always SH110X_WHITE
+    const unsigned char* bmp; // Bitmap for the car
   };
   std::vector<Car> cars;
   const int numLanes = 5;
   int laneYPositions[numLanes];
-  const int carMinHeight = 8;
-  const int carMaxHeight = 10;
-  const int carMinWidth = 15;
-  const int carMaxWidth = 30;
-  const int carMinSpeed = 1;
-  const int carMaxSpeed = 3; 
+  const int topSafeZoneY = 5; // Y-coordinate chicken needs to reach
+  unsigned long lastPlayerMoveTime = 0;
+  const unsigned long playerMoveCooldown = 150; // ms between player moves
 
   // Game State
   bool gameOverCR = false;
   int scoreCR = 0;
-  const int topSafeZoneY = 5; // Y-coordinate chicken needs to reach
-  unsigned long lastPlayerMoveTime = 0;
-  const unsigned long playerMoveCooldown = 150; // ms between player moves
 
   // Forward declarations for Crossy Road
   void resetCrossyRoadGame();
@@ -515,6 +595,14 @@ void updateObstacles() {
 
   for (size_t i = 0; i < obstacles.size(); ++i) {
     obstacles[i].x -= obstacleSpeed;
+
+    // Update bird animation frame
+    if (obstacles[i].isBird && (currentTime - obstacles[i].lastAnimTime > BIRD_ANIM_INTERVAL)) {
+      obstacles[i].isFrame1 = !obstacles[i].isFrame1;
+      obstacles[i].bmp = obstacles[i].isFrame1 ? bird_frame1_bmp : bird_frame2_bmp;
+      obstacles[i].lastAnimTime = currentTime;
+    }
+
     if (obstacles[i].x + obstacles[i].width < 0) {
       obstacles.erase(obstacles.begin() + i);
       i--;
@@ -529,16 +617,28 @@ void updateObstacles() {
     Obstacle newObs;
     newObs.x = SCREEN_WIDTH;
 
-    if (random(0, 4) == 0 && false) { // Birds still disabled
+    if (random(0, 3) == 0) { // 1 in 3 chance for a bird (re-enabled)
         newObs.isBird = true;
-        newObs.width = 12; 
-        newObs.height = 8 + random(0,5);
-        newObs.bmp = nullptr;
-        if (random(0,2) == 0) {
-             newObs.y = dinoBaseY - newObs.height - 10 - random(0,5) ;
-        } else {
-             newObs.y = dinoBaseY - newObs.height - random(0,3);
+        newObs.width = BIRD_WIDTH; 
+        newObs.height = BIRD_HEIGHT;
+        newObs.isFrame1 = true;
+        newObs.bmp = bird_frame1_bmp;
+        newObs.lastAnimTime = currentTime;
+        // Bird Y position logic:
+        if (random(0,2) == 0) { // High bird (duck or precise jump)
+             // Top of bird Y = dino's base Y (top of standing dino) - bird height - small gap
+             newObs.y = dinoBaseY - BIRD_HEIGHT - random(3, 8);
+        } else { // Low bird (jumpable by standing, might hit ducking)
+             // Top of bird Y = ground - bird_height - some space dino can clear
+             newObs.y = groundLineY - BIRD_HEIGHT - (DINO_STAND_HEIGHT / 2) + random(0,5) ;
+             // Ensure it's not too low to hit a non-jumping dino on ground
+             if (newObs.y + BIRD_HEIGHT > groundLineY - DINO_DUCK_HEIGHT + 3) { // if bird bottom is lower than top of ducked dino + buffer
+                newObs.y = groundLineY - BIRD_HEIGHT - DINO_DUCK_HEIGHT - random(3,6); // Place it clearly above ducking dino
+             }
         }
+        // Ensure bird is not off the top of the screen
+        if (newObs.y < 0) newObs.y = 0; 
+
     } else { // Cactus
         newObs.isBird = false;
         newObs.bmp = cactus_1_bmp;
@@ -741,46 +841,51 @@ void updateClouds() {
 
 // --- Crossy Road Game Functions ---
 void CrossyRoadGame::resetCrossyRoadGame() {
-  playerX = SCREEN_WIDTH / 2 - playerSize / 2;
-  playerY = SCREEN_HEIGHT - playerSize - 2; // Start at the bottom
+  playerX = SCREEN_WIDTH / 2 - CHICKEN_WIDTH / 2;
+  playerY = SCREEN_HEIGHT - CHICKEN_HEIGHT - 2; // Start at the bottom
   scoreCR = 0;
   gameOverCR = false;
   cars.clear();
+  chickenIsFrame1 = true;
+  lastChickenAnimTime = millis();
+
+  // Initialize/reset car speeds for a new game
+  currentCarMinSpeed = BASE_CAR_MIN_SPEED;
+  currentCarMaxSpeed = BASE_CAR_MAX_SPEED;
 
   // Initialize lane Y positions (top-down)
-  int laneHeight = (SCREEN_HEIGHT - topSafeZoneY - playerSize - 10) / numLanes; // available height / lanes
+  int laneHeightSpace = (SCREEN_HEIGHT - topSafeZoneY - CHICKEN_HEIGHT - 10) / numLanes; 
   for (int i = 0; i < numLanes; ++i) {
-    laneYPositions[i] = topSafeZoneY + 5 + (i * laneHeight) + carMaxHeight/2 ;
+    laneYPositions[i] = topSafeZoneY + 5 + (i * laneHeightSpace) + CAR_TYPE1_HEIGHT / 2 ; // Center default car height
   }
 
   // Create cars for each lane
   for (int i = 0; i < numLanes; ++i) {
     Car newCar;
-    newCar.y = laneYPositions[i] - carMaxHeight/2; // Center car vertically in its conceptual lane space
-    newCar.width = random(carMinWidth, carMaxWidth + 1);
-    newCar.height = random(carMinHeight, carMaxHeight + 1);
-    newCar.speed = random(carMinSpeed, carMaxSpeed + 1);
-    if (random(0, 2) == 0) { // Random direction
+    newCar.bmp = car_type1_bmp; // Assign default car bitmap
+    newCar.width = CAR_TYPE1_WIDTH;
+    newCar.height = CAR_TYPE1_HEIGHT;
+    newCar.y = laneYPositions[i] - newCar.height/2; 
+    
+    newCar.speed = random(currentCarMinSpeed, currentCarMaxSpeed + 1);
+    if (newCar.speed == 0) newCar.speed = (random(0,2) == 0) ? currentCarMinSpeed : -currentCarMinSpeed; // Ensure non-zero speed
+    if (random(0, 2) == 0) { 
       newCar.speed *= -1;
     }
-    if (newCar.speed > 0) { // Moving right
-        newCar.x = random(0, SCREEN_WIDTH / 2) * -1; // Start off-screen to the left
-    } else { // Moving left
+    if (newCar.speed > 0) { 
+        newCar.x = random(0, SCREEN_WIDTH / 2) * -1 - newCar.width; // Start off-screen to the left
+    } else { 
         newCar.x = SCREEN_WIDTH + random(0, SCREEN_WIDTH / 2); // Start off-screen to the right
     }
-    newCar.color = SH110X_WHITE;
     cars.push_back(newCar);
 
-    // Optionally, add a second car to some lanes for more density
-    if (i % 2 == 0 && numLanes > 2) { // Add to alternating lanes
-      Car newCar2 = newCar;
-      newCar2.width = random(carMinWidth, carMaxWidth + 1);
-      newCar2.height = random(carMinHeight, carMaxHeight+1);
+    if (i % 2 != 0 && numLanes > 2) { 
+      Car newCar2 = newCar; // Properties will be based on the first car in this lane
       // Ensure it doesn't overlap too much with the first car initially
       if (newCar2.speed > 0) { 
-          newCar2.x = newCar.x - newCar.width - random(30, 80);
+          newCar2.x = newCar.x - newCar.width - random(40, SCREEN_WIDTH/2);
       } else {
-          newCar2.x = newCar.x + newCar.width + random(30, 80);
+          newCar2.x = newCar.x + newCar.width + random(40, SCREEN_WIDTH/2);
       }
       // Ensure it's still in a reasonable starting range relative to the first car
       if (newCar2.x < -newCar2.width - SCREEN_WIDTH) newCar2.x = -newCar2.width - random(10,50);
@@ -792,34 +897,74 @@ void CrossyRoadGame::resetCrossyRoadGame() {
 }
 
 void CrossyRoadGame::drawPlayerCR() {
-  display.fillRect(playerX, playerY, playerSize, playerSize, SH110X_WHITE);
+  // Animate chicken
+  if (millis() - lastChickenAnimTime > chickenAnimInterval) {
+    chickenIsFrame1 = !chickenIsFrame1;
+    lastChickenAnimTime = millis();
+  }
+  const unsigned char* currentPlayerBmp = chickenIsFrame1 ? chicken_frame1_bmp : chicken_frame2_bmp;
+  display.drawBitmap(playerX, playerY, currentPlayerBmp, CHICKEN_WIDTH, CHICKEN_HEIGHT, SH110X_WHITE);
 }
 
 void CrossyRoadGame::drawObstaclesCR() {
   for (const auto& car : cars) {
-    display.fillRect(car.x, car.y, car.width, car.height, car.color);
+    if (car.bmp) {
+        display.drawBitmap(car.x, car.y, car.bmp, car.width, car.height, SH110X_WHITE);
+    } else { // Fallback if somehow a car has no bitmap
+        display.fillRect(car.x, car.y, car.width, car.height, SH110X_WHITE);
+    }
   }
 }
 
 void CrossyRoadGame::updateObstaclesCR() {
   for (auto& car : cars) {
     car.x += car.speed;
-    // Wrap around logic
+    
+    // Adjust speed if it falls outside current dynamic range (e.g. after score increase)
+    // This helps existing cars adapt slightly to difficulty changes.
+    int absSpeed = abs(car.speed);
+    if (absSpeed < currentCarMinSpeed) {
+        car.speed = (car.speed > 0) ? currentCarMinSpeed : -currentCarMinSpeed;
+    } else if (absSpeed > currentCarMaxSpeed) {
+        car.speed = (car.speed > 0) ? currentCarMaxSpeed : -currentCarMaxSpeed;
+    }
+    if (car.speed == 0) { // safety check, should not happen if spawn logic is good
+        car.speed = (random(0,2) == 0) ? currentCarMinSpeed : -currentCarMinSpeed;
+    }
+
+
+    // Wrap around logic with difficulty scaling for respawn gap
+    int maxRespawnGap = 50 - (scoreCR * 2); // Gap decreases as score increases
+    if (maxRespawnGap < 10) maxRespawnGap = 10; // Minimum gap
+    int minRespawnGap = 5 - (scoreCR / 2);
+    if (minRespawnGap < 1) minRespawnGap = 1;
+    if (minRespawnGap >= maxRespawnGap) minRespawnGap = maxRespawnGap -1; 
+    if (minRespawnGap <=0) minRespawnGap = 1;
+
     if (car.speed > 0 && car.x > SCREEN_WIDTH) { // Moving right, off right edge
-      car.x = -car.width - random(5, 50); // Reappear on the left, with some gap
+      car.x = -car.width - random(minRespawnGap, maxRespawnGap + 1); 
+      // Potentially re-evaluate speed based on current difficulty when wrapping
+      car.speed = random(currentCarMinSpeed, currentCarMaxSpeed + 1);
+      if (car.speed == 0) car.speed = currentCarMinSpeed;
+      if (random(0,10) < 2 && abs(car.speed) > currentCarMinSpeed) car.speed = (car.speed/abs(car.speed)) * currentCarMinSpeed; // 20% chance to slow down to min
+
     } else if (car.speed < 0 && car.x + car.width < 0) { // Moving left, off left edge
-      car.x = SCREEN_WIDTH + random(5, 50); // Reappear on the right, with some gap
+      car.x = SCREEN_WIDTH + random(minRespawnGap, maxRespawnGap + 1); 
+      // Potentially re-evaluate speed
+      car.speed = -random(currentCarMinSpeed, currentCarMaxSpeed + 1);
+      if (car.speed == 0) car.speed = -currentCarMinSpeed;
+      if (random(0,10) < 2 && abs(car.speed) > currentCarMinSpeed) car.speed = (car.speed/abs(car.speed)) * currentCarMinSpeed; // 20% chance to slow down to min
     }
   }
 }
 
 void CrossyRoadGame::checkCollisionsCR() {
   for (const auto& car : cars) {
-    // AABB collision detection
+    // AABB collision detection (player is CHICKEN_WIDTH x CHICKEN_HEIGHT)
     if (playerX < car.x + car.width &&
-        playerX + playerSize > car.x &&
+        playerX + CHICKEN_WIDTH > car.x &&
         playerY < car.y + car.height &&
-        playerY + playerSize > car.y) {
+        playerY + CHICKEN_HEIGHT > car.y) {
       gameOverCR = true;
       Serial.println("Crossy Road: Collision!");
       return;
@@ -831,9 +976,24 @@ void CrossyRoadGame::checkWinConditionCR() {
   if (playerY <= topSafeZoneY) {
     scoreCR++;
     Serial.print("Crossy Road: Reached top! Score: "); Serial.println(scoreCR);
+
+    // Increase difficulty based on score
+    if (scoreCR % 2 == 0 && currentCarMinSpeed < MAX_POSSIBLE_CAR_MIN_SPEED) { // Every 2 points
+        currentCarMinSpeed++;
+        Serial.print("Min Car Speed increased to: "); Serial.println(currentCarMinSpeed);
+    }
+    if (scoreCR % 3 == 0 && currentCarMaxSpeed < MAX_POSSIBLE_CAR_MAX_SPEED) { // Every 3 points
+        currentCarMaxSpeed++;
+        Serial.print("Max Car Speed increased to: "); Serial.println(currentCarMaxSpeed);
+        // Ensure min speed doesn't exceed max speed
+        if (currentCarMinSpeed > currentCarMaxSpeed) {
+            currentCarMinSpeed = currentCarMaxSpeed;
+        }
+    }
+
     // Reset player to start for another run
-    playerX = SCREEN_WIDTH / 2 - playerSize / 2;
-    playerY = SCREEN_HEIGHT - playerSize - 2;
+    playerX = SCREEN_WIDTH / 2 - CHICKEN_WIDTH / 2;
+    playerY = SCREEN_HEIGHT - CHICKEN_HEIGHT - 2;
     // Optionally, could increase difficulty here (e.g., car speeds)
     lastPlayerMoveTime = millis(); // Allow immediate move after scoring
   }
@@ -862,11 +1022,16 @@ void CrossyRoadGame::handleCrossyRoadInput() {
     int joyYVal = analogRead(JOY_VRY_PIN);
 
     bool moved = false;
+    int playerStep = CHICKEN_HEIGHT; // Move one chicken height at a time
+
     if (joyYVal < JOYSTICK_THRESHOLD_LOW) { // Up
       playerY -= playerStep;
       moved = true;
     } else if (joyYVal > JOYSTICK_THRESHOLD_HIGH) { // Down
-      playerY += playerStep;
+      // Prevent moving off bottom of screen if already at start
+      if (playerY + playerStep + CHICKEN_HEIGHT <= SCREEN_HEIGHT) {
+        playerY += playerStep;
+      }
       moved = true;
     } else if (joyXVal < JOYSTICK_THRESHOLD_LOW) { // Left
       playerX -= playerStep;
@@ -879,9 +1044,13 @@ void CrossyRoadGame::handleCrossyRoadInput() {
     if (moved) {
       // Constrain player to screen boundaries
       if (playerX < 0) playerX = 0;
-      if (playerX + playerSize > SCREEN_WIDTH) playerX = SCREEN_WIDTH - playerSize;
-      if (playerY < 0) playerY = 0; // Allow reaching very top temporarily for win check
-      if (playerY + playerSize > SCREEN_HEIGHT) playerY = SCREEN_HEIGHT - playerSize;
+      if (playerX + CHICKEN_WIDTH > SCREEN_WIDTH) playerX = SCREEN_WIDTH - CHICKEN_WIDTH;
+      if (playerY < 0) playerY = 0; 
+      // if (playerY + CHICKEN_HEIGHT > SCREEN_HEIGHT) playerY = SCREEN_HEIGHT - CHICKEN_HEIGHT; // Already handled by start pos & down move check
+      // Ensure player cannot go below starting Y position unless they started there
+      int startY = SCREEN_HEIGHT - CHICKEN_HEIGHT - 2;
+      if (playerY > startY) playerY = startY;
+
       lastPlayerMoveTime = currentTime;
     }
   }

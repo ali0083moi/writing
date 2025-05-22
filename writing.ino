@@ -466,9 +466,13 @@ void displayMenu() {
   }
 }
 
+// Forward declaration of Tetris namespace and its initialize_game function
+namespace Tetris {
+    void initialize_game();
+}
+
 void handleMenuInput() {
   int joyYVal = analogRead(JOY_VRY_PIN);
-  // int currentJoySWState = digitalRead(JOY_SW_PIN); // Not directly needed here for selection anymore
   static unsigned long lastInputTime = 0;
   unsigned long currentTime = millis();
 
@@ -476,7 +480,6 @@ void handleMenuInput() {
     return;
   }
   
-  // Vertical navigation
   if (joyYVal < JOYSTICK_THRESHOLD_LOW) { // Up
     selectedGame = (selectedGame - 1 + numGames) % numGames;
     lastInputTime = currentTime;
@@ -485,27 +488,23 @@ void handleMenuInput() {
     lastInputTime = currentTime;
   }
 
-  // Selection (single click) - now driven by the flag from checkJoystickEvents
   if (singleClickForMenu) {
     GameState newGameState = static_cast<GameState>(selectedGame + 1);
-    // Reset game if re-entering or entering for the first time
     if (newGameState == GOOGLE_DINO) {
-        resetDinoGame();
+            resetDinoGame();
     } else if (newGameState == CROSSY_ROAD) {
         CrossyRoadGame::resetCrossyRoadGame();
+    } else if (newGameState == TETRIS) {
+        Tetris::initialize_game(); // Tetris namespace is now defined before this function
     }
-    // Add other game resets here if needed
 
-    currentGameState = newGameState; // MENU is 0, games start from 1
+    currentGameState = newGameState; 
     Serial.print("Selected game (single click): "); Serial.println(gameNames[selectedGame]);
     
-    clickCount = 0;          // Consume the click sequence
-    singleClickForMenu = false; // Consume the flag
-    // Update lastJoySWPressTime to prevent checkJoystickEvents from immediately
-    // re-interpreting the button state if it's still held down from the single click.
+    clickCount = 0;          
+    singleClickForMenu = false; 
     lastJoySWPressTime = millis(); 
   }
-  // lastJoySWState is updated in checkJoystickEvents
 }
 
 
@@ -584,7 +583,7 @@ void drawObstacles() {
     } else if (obs.isBird) {
         display.fillRect(obs.x, obs.y, obs.width, obs.height, SH110X_WHITE);
     } else {
-        display.fillRect(obs.x, obs.y, obs.width, obs.height, SH110X_WHITE);
+    display.fillRect(obs.x, obs.y, obs.width, obs.height, SH110X_WHITE);
     }
   }
 }
@@ -676,12 +675,12 @@ void handleGoogleDinoInput() {
         // However, if a double click happened, currentGameState would be MENU, so we wouldn't be in GOOGLE_DINO gameOver.
         
         // Serial.println("Game Over - Click for restart"); // Debug
-        resetDinoGame();
+            resetDinoGame();
         // clickCount = 0; // Reset global clickCount too, as this click is consumed.
         // lastJoySWPressTime = currentTime; // And global press time.
         // This is better handled if the global click system signals a general purpose single click.
         // For now, this independent click detection for restart should work.
-    }
+       }
     lastJoySWStateForRestart = currentJoySWStateForRestart;
     return;
   }
@@ -763,7 +762,7 @@ void displayGameOver() {
 
 void runGoogleDino() {
   using namespace DinoGame;
-  
+
   if (isJumping) {
     dinoY += jumpVelocity;
     jumpVelocity += gravity;
@@ -1114,145 +1113,321 @@ void runAirplane() {
   // display.display() is called in loop()
 }
 
-void runTetris() {
-  Tetris::next_frame();
-  Tetris::display_board();
-  display.println("Tetris - WIP");
-  // display.display() is called in loop()
-}
-
+// --- Tetris Game Implementation ---
 namespace Tetris {
-    void display_board();
-    void new_shape();
-    void next_frame();
-    void rotate();
-    void draw_board();
-    enum color {
-        SSH110X_BLACK, SSH110X_WHITE, SSH110X_BLUE, SSH110X_GREEN, SSH110X_RED, SSH110X_PINK, SSH110_YELLOW
-    }
-}
+    // Forward declarations within the namespace
+    void clear_completed_lines();
+    void draw_game_board();
+    void spawn_new_shape(); 
+    void initialize_game(); // Also forward declare if its definition is after a call within namespace (it's called by handleMenuInput externally though)
 
-const bool O[4][4] = {
-	{0 , 0 , 0 , 0},
-	{0 , 1 , 1 , 0},
-	{0 , 1 , 1 , 0},
-	{0 , 0 , 0 , 0}
-};
 
-const bool I[4][4] = {
-	{0 , 0 , 0 , 0},
-	{1 , 1 , 1 , 1},
-	{0 , 0 , 0 , 0},
-	{0 , 0 , 0 , 0}
-};
+    // Color definitions
+    enum Color {
+        BLACK = 0, // Must be 0
+        WHITE = 1, // Must be 1 for SH110X_WHITE mapping
+        BLUE = 2,
+        GREEN = 3,
+        RED = 4,
+        PINK = 5,
+        YELLOW = 6
+    };
 
-const bool L[4][4] = {
-	{0 , 0 , 0 , 0},
-	{1 , 1 , 1 , 0},
-	{0 , 0 , 1 , 0},
-	{0 , 0 , 0 , 0}
-};
+    // Shape definitions
+    const bool O[4][4] = {
+        {0, 0, 0, 0},
+        {0, 1, 1, 0},
+        {0, 1, 1, 0},
+        {0, 0, 0, 0}
+    };
 
-const bool J[4][4] = {
-	{0 , 0 , 0 , 0},
-	{1 , 1 , 1 , 0},
-	{1 , 0 , 0 , 0},
-	{0 , 0 , 0 , 0}
-};
+    const bool I[4][4] = {
+        {0, 0, 0, 0},
+        {1, 1, 1, 1},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    };
 
-const bool T[4][4] = {
-	{0 , 0 , 0 , 0},
-	{1 , 1 , 1 , 0},
-	{0 , 1 , 0 , 0},
-	{0 , 0 , 0 , 0}
-};
+    const bool L[4][4] = {
+        {0, 0, 0, 0},
+        {0, 1, 0, 0}, 
+        {0, 1, 0, 0},
+        {0, 1, 1, 0}
+    };
 
-const bool z[4][4] = {
-	{0 , 0 , 0 , 0},
-	{1 , 1 , 0 , 0},
-	{0 , 1 , 1 , 0},
-	{0 , 0 , 0 , 0}
-};
+    const bool J[4][4] = {
+        {0, 0, 0, 0},
+        {0, 0, 1, 0}, 
+        {0, 0, 1, 0},
+        {0, 1, 1, 0}
+    };
 
-const bool s[4][4] = {
-	{0 , 0 , 0 , 0},
-	{0 , 1 , 1 , 0},
-	{1 , 1 , 0 , 0},
-	{0 , 0 , 0 , 0}
-};
+    const bool T[4][4] = {
+        {0, 0, 0, 0},
+        {0, 1, 1, 1},
+        {0, 0, 1, 0},
+        {0, 0, 0, 0}
+    };
 
-const bool*** shapes[7] = {
-	O, I, L, J, T, z, s
-};
+    const bool Z[4][4] = {
+        {0, 0, 0, 0},
+        {0, 1, 1, 0},
+        {0, 0, 1, 1},
+        {0, 0, 0, 0}
+    };
 
-int board[20][10];
-int cur_top, cur_left , cur_color;
-bool cur_shape[4][4];
+    const bool S[4][4] = {
+        {0, 0, 0, 0},
+        {0, 0, 1, 1},
+        {0, 1, 1, 0},
+        {0, 0, 0, 0}
+    };
 
-void Tertris::rotate() {
-	bool temp[4][4];
-	for (int i = 0; i < 4; i++) {
-		for (int j = 0; j < 4; j++) {
-			temp[j][3 - i] = cur_shape[i][j];
-		}
-	}
-	memcpy(cur_shape, temp, sizeof(cur_shape));
-}
+    const bool (*shapes[7])[4][4] = {
+        &O, &I, &L, &J, &T, &Z, &S
+    };
 
-void Tetris::draw_board() {
-	for (int i = 0; i < 20; i++) {
-		for (int j = 0; j < 10; j++) {
-			display.fillRect(j * 6, i * 6, 6, 6, colour[board[i][j]]);
-		}
-	}
-}
+    int board[20][10] = {0}; 
+    int cur_top = 0, cur_left = 0;
+    Color cur_color = BLACK;
+    bool cur_shape[4][4] = {0};
+    bool tetrisGameOver = false;
+    unsigned long lastFallTime = 0;
+    unsigned long fallInterval = 500; 
+    unsigned long lastMoveTime = 0;   
+    const unsigned long moveDebounceInterval = 150; 
+    unsigned long lastRotateTime = 0; 
+    const unsigned long rotateDebounceInterval = 200; 
 
-void Tetris::new_shape(){
-    for(int i = 0 ; i < 20 ; i++){
-        bool complete_row = true;
-        for(int j = 0 ; j < 10 ; j++){
-            complete_row &= board[i][j];
-        }
-        if(complete_row){
-            for(int j = 0 ; j < 10 ; j++){
-                board[i][j] = 0;
+    bool check_collision(int test_top, int test_left, const bool shape_matrix[4][4]) {
+        for (int r = 0; r < 4; r++) {
+            for (int c = 0; c < 4; c++) {
+                if (shape_matrix[r][c]) { 
+                    int board_r = test_top + r;
+                    int board_c = test_left + c;
+
+                    if (board_c < 0 || board_c >= 10 || board_r >= 20) {
+                        return true; 
+                    }
+                    if (board_r >=0 && board[board_r][board_c] != BLACK) {
+                        return true;
+                    }
+                }
             }
-            for(int k = i ; k > 0 ; k--){
-                memcpy(board[k], board[k-1], sizeof(board[k]));
+        }
+        return false; 
+    }
+
+    void rotate_current_shape() { 
+        if (tetrisGameOver) return;
+        bool temp_shape[4][4];
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                temp_shape[j][3 - i] = cur_shape[i][j];
+            }
+        }
+        if (!check_collision(cur_top, cur_left, temp_shape)) {
+            memcpy(cur_shape, temp_shape, sizeof(cur_shape));
+        }
+    }
+
+    void move_piece_sideways(int direction) { 
+        if (tetrisGameOver) return;
+        int new_left = cur_left + direction;
+        if (!check_collision(cur_top, new_left, cur_shape)) {
+            cur_left = new_left;
+        }
+    }
+    
+    void draw_game_board() { 
+        // Calculate starting position to center the board
+        // Board is 10 columns * 4 pixels = 40 pixels wide
+        // Board is 16 rows * 4 pixels = 64 pixels high (fits screen height)
+        const int board_width = 10 * 4;
+        const int board_height = 16 * 4;
+        const int start_x = (SCREEN_WIDTH - board_width) / 2;
+        const int start_y = 0; // Start from top since we're using full height
+
+        // Draw the board (only visible rows)
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 10; j++) {
+                Color block_color_enum = static_cast<Color>(board[i + 4][j]); // Offset by 4 rows to show middle of board
+                uint16_t display_color = (block_color_enum == BLACK) ? SH110X_BLACK : SH110X_WHITE;
+                display.fillRect(start_x + (j * 4), 
+                               start_y + (i * 4), 
+                               3, // 3 pixels wide to leave 1px gap
+                               3, // 3 pixels high to leave 1px gap
+                               display_color);
             }
         }
     }
-	memcpy(cur_shape, shapes[random(0, 7)], sizeof(cur_shape));
-	cur_top = 0; cur_left = 0;
-	cur_color = random(0, 7);
-	return;
-}
 
-void Tetris::next_frame(){
-	for(int i = 0 ; i < 4 ; i++){
-		for(int j = 0 ; j < 4 ; j++){
-			if(cur_shape[i][j]){
-				if(board[cur_top + i + 1][cur_left + j]){
-					new_shape();
-					return;
-				}
-			}
-		}
-	}
-	for(int j = 0 ; j < 4 ; j++){
-		board[cur_top][cur_left + j] = 0;
-	}
-	cur_top++; cur_left++;
-	for(int i = 0 ; i < 4 ; i++){
-		for(int j = 0 ; j < 4 ; j++){
-			board[cur_top + i][cur_left + j] = cur_shape[i][j] * cur_color;
-		}
-	}
-	return;
-}
+    void clear_completed_lines() {
+        for (int i = 19; i >= 0; i--) { 
+            bool line_complete = true;
+            for (int j = 0; j < 10; j++) {
+                if (board[i][j] == BLACK) {
+                    line_complete = false;
+                    break;
+                }
+            }
+            if (line_complete) {
+                for (int k = i; k > 0; k--) {
+                    memcpy(board[k], board[k - 1], sizeof(board[k]));
+                }
+                memset(board[0], BLACK, sizeof(board[0]));
+                i++; 
+            }
+        }
+    }
+    
+    void spawn_new_shape() { 
+        clear_completed_lines();
 
-void Tetris::display_board(){
-	display.clearDisplay();
-	draw_board();
-	display.display();
+        int random_shape_index = random(0, 7);
+        memcpy(cur_shape, *shapes[random_shape_index], sizeof(cur_shape));
+        cur_top = 0; 
+        bool shape_starts_lower = true;
+        for(int c=0; c<4; ++c) if(cur_shape[0][c]) shape_starts_lower = false;
+        if(shape_starts_lower) {
+            bool shape_starts_even_lower = true;
+            for(int c=0; c<4; ++c) if(cur_shape[1][c]) shape_starts_even_lower = false;
+            if(shape_starts_even_lower) cur_top = -2;
+            else cur_top = -1;
+        }
+
+        cur_left = (10 - 4) / 2; 
+        cur_color = static_cast<Color>(random(WHITE, YELLOW + 1)); 
+
+        if (check_collision(cur_top, cur_left, cur_shape)) {
+            tetrisGameOver = true;
+            Serial.println("Tetris: Game Over!");
+            if (cur_top < 0) cur_top = 0; 
+            return;
+        }
+        tetrisGameOver = false; 
+    }
+
+    void land_current_piece() {
+        for (int r = 0; r < 4; r++) {
+            for (int c = 0; c < 4; c++) {
+                if (cur_shape[r][c]) {
+                    int board_r = cur_top + r;
+                    int board_c = cur_left + c;
+                    if (board_r >= 0 && board_r < 20 && board_c >= 0 && board_c < 10) {
+                        board[board_r][board_c] = cur_color;
+                    }
+                }
+            }
+        }
+        spawn_new_shape();
+    }
+
+    void update_frame() { 
+        if (tetrisGameOver) return;
+        if (!check_collision(cur_top + 1, cur_left, cur_shape)) {
+            cur_top++; 
+        } else {
+            land_current_piece();
+        }
+    }
+
+    void render_display() { 
+        display.clearDisplay();
+        draw_game_board(); 
+
+        if (!tetrisGameOver) {
+            // Calculate starting position to match draw_game_board
+            const int board_width = 10 * 4;
+            const int board_height = 16 * 4;
+            const int start_x = (SCREEN_WIDTH - board_width) / 2;
+            const int start_y = 0;
+
+            // Draw current piece (adjusted for visible area)
+            for (int r = 0; r < 4; r++) {
+                for (int c = 0; c < 4; c++) {
+                    if (cur_shape[r][c]) {
+                        // Only draw if the piece is in the visible area
+                        int visible_row = cur_top + r - 4; // Adjust for 4-row offset
+                        if (visible_row >= 0 && visible_row < 16) {
+                            uint16_t display_color = (cur_color == BLACK) ? SH110X_BLACK : SH110X_WHITE; 
+                            display.fillRect(start_x + ((cur_left + c) * 4),
+                                           start_y + (visible_row * 4),
+                                           3, // 3 pixels wide to leave 1px gap
+                                           3, // 3 pixels high to leave 1px gap
+                                           display_color);
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (tetrisGameOver) {
+            display.setTextSize(2);
+            int16_t x1, y1;
+            uint16_t w, h;
+            const char* gameOverText = "Game Over";
+            display.getTextBounds(gameOverText, 0, 0, &x1, &y1, &w, &h);
+            display.setCursor((SCREEN_WIDTH - w) / 2, SCREEN_HEIGHT / 2 - h / 2);
+            display.println(gameOverText);
+        }
+        display.display();
+    }
+    
+    void initialize_game() {
+        memset(board, BLACK, sizeof(board)); 
+        tetrisGameOver = false;
+        lastFallTime = millis();
+        spawn_new_shape(); 
+    }
+
+    void handle_tetris_input() {
+        if (tetrisGameOver) return;
+
+        unsigned long current_time = millis();
+        int joy_x_val = analogRead(JOY_VRX_PIN);
+        int joy_y_val = analogRead(JOY_VRY_PIN);
+        int joy_sw_state = digitalRead(JOY_SW_PIN);
+
+        if (current_time - lastMoveTime > moveDebounceInterval) {
+            if (joy_x_val < JOYSTICK_THRESHOLD_LOW) { 
+                move_piece_sideways(-1);
+                lastMoveTime = current_time;
+            } else if (joy_x_val > JOYSTICK_THRESHOLD_HIGH) { 
+                move_piece_sideways(1);
+                lastMoveTime = current_time;
+            }
+        }
+
+        static int last_joy_sw_state_tetris = HIGH;
+        if (joy_sw_state == LOW && last_joy_sw_state_tetris == HIGH && current_time - lastRotateTime > rotateDebounceInterval) {
+            rotate_current_shape();
+            lastRotateTime = current_time;
+        }
+        last_joy_sw_state_tetris = joy_sw_state;
+
+        if (joy_y_val > JOYSTICK_THRESHOLD_HIGH) { 
+            if (current_time - lastFallTime > 50) { 
+                 update_frame(); 
+                 lastFallTime = current_time; 
+            }
+        }
+    }
+} // End namespace Tetris
+
+void runTetris() {
+    if (Tetris::tetrisGameOver) {
+        Tetris::render_display(); 
+        return;
+    }
+
+    Tetris::handle_tetris_input(); 
+
+    unsigned long currentTime = millis();
+    if (currentTime - Tetris::lastFallTime > Tetris::fallInterval) {
+        Tetris::update_frame(); 
+        Tetris::lastFallTime = currentTime;
+    }
+
+    Tetris::render_display(); 
 }
